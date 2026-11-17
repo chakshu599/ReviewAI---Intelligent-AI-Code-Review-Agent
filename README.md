@@ -1,36 +1,242 @@
 # ReviewAI — Intelligent AI Code Review Agent
 
-ReviewAI reviews unified Git diffs and reports evidence-based potential bugs, security risks, test gaps, code-quality concerns, performance issues, and maintainability risks. It accepts pasted diffs, `.diff`/`.patch` uploads, and public GitHub commit or pull-request references. Submitted source is treated as untrusted text and is never executed. **A clean report is not proof that code is bug-free or secure.**
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-29%20passed-brightgreen.svg)](tests/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-UI-red.svg)](https://streamlit.io/)
 
-## Architecture and workflow
+ReviewAI analyzes unified Git diffs and reports **evidence-based** potential bugs, security risks, test gaps, code-quality concerns, performance issues, and maintainability risks. It accepts pasted diffs, `.diff`/`.patch` uploads, and public GitHub commit or pull-request references.
 
-`app.py` provides the Streamlit dashboard and JSON/Markdown exports. `reviewai/core` owns configuration, strict Pydantic contracts, the Groq provider boundary, orchestration, and the explainable risk heuristic. `reviewai/tools` parses unified patches, runs added-line security and quality checks, detects possible test gaps, fetches public GitHub diffs, and formats reports. `reviewai/agents` contains semantic, security, and test-analysis entry points. `reviewai/utils` validates uploads and repository references. GitHub diffs use the public REST API (private repositories are rejected); GitPython also provides a bounded local working-tree diff helper.
+---
 
-The controller validates input → parses files/hunks → runs deterministic checks → asks Groq for semantic feedback → validates findings with Pydantic → deduplicates and normalizes locations → calculates a risk score → renders/downloads the report. The Groq agent can call only the allowlisted read-only analysis tools (`analyze_code`, `security_scan`, `test_gap_analysis`), with empty, validated arguments. Parsing and report generation remain controller-owned tools. There is no shell tool or code execution. The risk score adds 40/22/9/3 points per Critical/High/Medium/Low finding, capped at 100; it is a prioritization heuristic, not a verified security assessment.
+## Features
 
-## Run locally
+| Feature | Description |
+|---------|-------------|
+| **Multi-source Input** | Paste diffs, upload `.diff`/`.patch` files, or fetch from public GitHub PRs/commits |
+| **Deterministic Checks** | Static analysis for security patterns, code quality, test gaps (works without API key) |
+| **AI-Assisted Review** | Optional Groq-powered semantic analysis for deeper insights |
+| **Risk Scoring** | Explainable heuristic scoring (Critical/High/Medium/Low) with prioritization |
+| **Export Reports** | Download JSON or Markdown reports for CI/CD integration |
+| **Streamlit UI** | Clean, responsive web interface with filtering and drill-down |
 
-Requires Python 3.11+ and Git. Create an environment, install dependencies, copy `.env.example` to `.env`, then set `GROQ_API_KEY` (never commit `.env`). `GROQ_MODEL` defaults to `llama-3.3-70b-versatile`; set it to a model currently enabled for your Groq account. Optional settings include `GROQ_TIMEOUT_SECONDS`, `GROQ_MAX_RETRIES`, `MAX_DIFF_BYTES`, `MAX_FILES`, `MAX_LLM_CONTEXT_CHARS`, and `GITHUB_TOKEN` (for GitHub API rate limits; public repositories only).
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Streamlit UI (app.py)                    │
+└─────────────────────────────┬───────────────────────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     ReviewOrchestrator                          │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐  │
+│  │  Validate   │ │   Parse     │ │  Determin-  │ │  Groq LLM │  │
+│  │  Input      │ │  Diff       │ │  istic Chks │ │  Semantic │  │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘  │
+│                              │                                    │
+│                              ▼                                    │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                │
+│  │  Pydantic   │ │ Deduplicate │ │ Risk Score  │                │
+│  │  Validate   │ │ & Normalize │ │  (0-100)    │                │
+│  └─────────────┘ └─────────────┘ └─────────────┘                │
+└─────────────────────────────┬───────────────────────────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Report Generator                           │
+│                    (JSON / Markdown / UI)                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Design Principles:**
+- **No code execution** — Submitted diffs are analyzed as text only
+- **Allowlisted tools** — Groq agent can only call read-only analysis functions
+- **Pydantic contracts** — All findings validated against strict schemas
+- **Explainable scoring** — Risk score shows exactly how points were calculated
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Python 3.11+
+- Git
+- [Groq API key](https://console.groq.com/keys) (optional, for AI-assisted review)
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/chakshu599/ReviewAI---Intelligent-AI-Code-Review-Agent.git
+cd ReviewAI---Intelligent-AI-Code-Review-Agent
+
+# Create virtual environment
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
-cp .env.example .env               # Windows: copy .env.example .env
-# Edit .env and add GROQ_API_KEY
+
+# Configure environment
+cp .env.example .env
+# Edit .env and add your GROQ_API_KEY
+```
+
+### Run the App
+
+```bash
 streamlit run app.py
 ```
 
-On minimal Debian/Kali images where `ensurepip` is unavailable, create the environment with `python -m venv --without-pip .venv`, then install into it with `python -m pip --python .venv/bin/python install -r requirements.txt` (use `.venv\Scripts\python.exe` on Windows).
+Open http://localhost:8501 in your browser.
 
-Run automated tests with `pytest -q`. Without a Groq key, deterministic checks still produce a clearly labeled limited report; Groq failures and invalid model output are surfaced rather than presented as successful AI analysis. Inputs are limited by `MAX_DIFF_BYTES` and `MAX_FILES`; GitHub access is restricted to public `github.com` URLs and commit SHAs or `PR:<number>` references.
+---
 
-## Validation notes
+## Configuration
 
-- **What went wrong / how it was handled:** pytest initially treated the public `test_gap_analysis` tool as a test because its module/function names match pytest discovery; the tool is now explicitly excluded from collection. Hunk-count validation exposed a malformed fixture, and the GitPython integration test caught an unsupported keyword being forwarded as a Git CLI option; both were fixed and covered by tests. The OS Python was externally managed and lacked `ensurepip`, so dependencies were installed into a workspace `.venv` instead of system-wide.
-- **Tests actually run:** `.venv/bin/python -m pytest -q` — **29 passed** (Python 3.13.14, 1.43 s).
-- **Local UI smoke test:** Streamlit loaded in a browser; loading and analyzing `sample_diffs/python_example.diff` produced an explicit deterministic-only report because no `GROQ_API_KEY` was configured. It showed a High SQL interpolation finding and a Low test-gap prompt, with a 25/100 Medium heuristic score. The live Groq API path was not exercised without credentials.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GROQ_API_KEY` | — | **Required** for AI-assisted review |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model to use |
+| `GROQ_TIMEOUT_SECONDS` | `30` | Request timeout |
+| `GROQ_MAX_RETRIES` | `2` | Max retry attempts |
+| `MAX_DIFF_BYTES` | `50000` | Max diff size to process |
+| `MAX_FILES` | `20` | Max files per diff |
+| `MAX_LLM_CONTEXT_CHARS` | `12000` | Context window for LLM |
+| `GITHUB_TOKEN` | — | GitHub PAT for higher rate limits (public repos only) |
 
-## Limitations and next steps
+---
 
-Static rules are intentionally narrow and can miss issues or raise false positives; semantic accuracy depends on the selected model and the provided diff context. GitHub API diff availability and rate limits apply. The test-gap result is a prompt to investigate, not proof of missing coverage. Next: add repository-specific context/configurable rules, richer language-aware static analysis, line-level inline comments, and CI integration with human review gates.
+## Usage
+
+### 1. Paste a Diff
+Copy any unified Git diff and paste it into the text area.
+
+### 2. Upload a File
+Upload a `.diff` or `.patch` file (max 50KB by default).
+
+### 3. Fetch from GitHub
+Enter a public GitHub repository URL and a commit SHA or `PR:<number>`.
+
+### Example Diff
+```diff
+@@ -10,7 +10,7 @@ def get_user(user_id):
+     cursor = conn.cursor()
+-    cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
++    cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+     return cursor.fetchone()
+```
+**Finding**: `HIGH` — SQL Injection via string interpolation
+
+---
+
+## Project Structure
+
+```
+reviewai/
+├── agents/              # Semantic analysis agents
+│   ├── code_review_agent.py
+│   ├── security_agent.py
+│   └── test_analysis_agent.py
+├── core/                # Core orchestration & contracts
+│   ├── config.py        # Settings management
+│   ├── llm_client.py    # Groq API wrapper
+│   ├── orchestrator.py  # Main pipeline
+│   ├── risk_scoring.py  # Heuristic risk calculation
+│   └── schemas.py       # Pydantic models
+├── tools/               # Deterministic analysis tools
+│   ├── code_analyzer.py
+│   ├── diff_parser.py
+│   ├── github_source.py
+│   ├── report_generator.py
+│   ├── static_security_scanner.py
+│   └── test_gap_analyzer.py
+└── utils/               # Validators & error handling
+    ├── error_handler.py
+    └── validators.py
+```
+
+---
+
+## Running Tests
+
+```bash
+# Run all tests
+pytest -q
+
+# Run with coverage
+pytest --cov=reviewai --cov-report=html
+
+# Run specific test file
+pytest tests/test_orchestrator.py -v
+```
+
+**Current status**: 29 tests passing (Python 3.13)
+
+---
+
+## Example Output
+
+### Risk Score Breakdown
+| Severity | Points | Count | Subtotal |
+|----------|--------|-------|----------|
+| Critical | 40 | 0 | 0 |
+| High | 22 | 1 | 22 |
+| Medium | 9 | 2 | 18 |
+| Low | 3 | 3 | 9 |
+| **Total** | | | **49/100** |
+
+### Finding Categories
+- **Security**: SQL injection, XSS, path traversal, hardcoded secrets
+- **Bugs**: Null dereference, off-by-one, resource leaks
+- **Performance**: N+1 queries, inefficient loops, missing indexes
+- **Maintainability**: Complex functions, duplicate code, missing docs
+- **Test Gaps**: Uncovered branches, missing edge cases
+
+---
+
+## Limitations
+
+- Static rules are intentionally narrow — may miss issues or raise false positives
+- Semantic accuracy depends on the selected Groq model and diff context
+- GitHub API: public repos only, rate limits apply without token
+- Test-gap analysis is a prompt to investigate, not proof of missing coverage
+- No private repository access (by design)
+
+---
+
+## Roadmap
+
+- [ ] Repository-specific configuration & custom rules
+- [ ] Language-aware static analysis (TypeScript, Go, Rust, etc.)
+- [ ] Line-level inline comments in diff view
+- [ ] CI/CD integration (GitHub Actions, GitLab CI)
+- [ ] Human review gates & approval workflow
+- [ ] SARIF export for security tooling integration
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Make changes and add tests
+4. Run tests: `pytest -q`
+5. Submit a Pull Request
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+## Security
+
+Found a security issue? Please report it privately via [GitHub Security Advisories](https://github.com/chakshu599/ReviewAI---Intelligent-AI-Code-Review-Agent/security/advisories/new).
+
+---
+
+**Built with**: Python, Streamlit, Pydantic, Groq, GitPython
