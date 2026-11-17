@@ -34,7 +34,3 @@ Run automated tests with `pytest -q`. Without a Groq key, deterministic checks s
 ## Limitations and next steps
 
 Static rules are intentionally narrow and can miss issues or raise false positives; semantic accuracy depends on the selected model and the provided diff context. GitHub API diff availability and rate limits apply. The test-gap result is a prompt to investigate, not proof of missing coverage. Next: add repository-specific context/configurable rules, richer language-aware static analysis, line-level inline comments, and CI integration with human review gates.
-
-## Publish to GitHub
-
-Create an empty GitHub repository, then from this project directory run `git init`, `git add .`, `git commit -m "Build ReviewAI code review agent"`, `git branch -M main`, `git remote add origin https://github.com/<YOUR-USER>/<YOUR-REPO>.git`, and `git push -u origin main`. Confirm `.env` is ignored before pushing; configure `GROQ_API_KEY` only in your local environment or deployment secret manager.
