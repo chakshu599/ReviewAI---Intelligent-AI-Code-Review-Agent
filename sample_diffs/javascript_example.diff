@@ -1,0 +1,9 @@
+diff --git a/src/renderProfile.js b/src/renderProfile.js
+index a0c5d31..b3f7129 100644
+--- a/src/renderProfile.js
++++ b/src/renderProfile.js
+@@ -6,2 +6,3 @@ export function renderProfile(profile) {
+-  nameNode.textContent = profile.name;
++  nameNode.innerHTML = profile.name;
++  bioNode.innerHTML = window.location.hash.slice(1);
+ }
