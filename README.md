@@ -7,8 +7,6 @@
 
 ReviewAI analyzes unified Git diffs and reports **evidence-based** potential bugs, security risks, test gaps, code-quality concerns, performance issues, and maintainability risks. It accepts pasted diffs, `.diff`/`.patch` uploads, and public GitHub commit or pull-request references.
 
-> **⚠️ Important**: Submitted source is treated as untrusted text and is never executed. A clean report is **not proof** that code is bug-free or secure.
-
 ---
 
 ## What It Does
